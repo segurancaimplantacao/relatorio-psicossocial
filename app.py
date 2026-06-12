@@ -26,24 +26,15 @@ if not df_funcs.empty:
     if funcionario_selecionado:
         id_funcionario = nome_para_id[funcionario_selecionado]
         
-        # 3. Busca respostas e as perguntas associadas
-        # Aqui usamos o conceito de JOIN para trazer o texto da pergunta e o tipo
-        response_dados = supabase.table("respostas").select("resposta, perguntas(pergunta, tipo)").eq("funcionarios_id", id_funcionario).execute()
+        # 3. Busca apenas as respostas do funcionário (sem fazer JOIN complexo)
+        response_dados = supabase.table("respostas").select("resposta").eq("funcionarios_id", id_funcionario).execute()
         
         if response_dados.data:
-            dados = []
-            for item in response_dados.data:
-                # Transforma a resposta texto (ex: "Concordo") em pontos (1 a 4)
-                # Exemplo: Concordo=4, Discordo=1
-                valor = 4 if item['resposta'] == "Concordo" else 1
-                
-                # Se for pergunta Positiva, invertemos o valor
-                if item['perguntas']['tipo'] == "Positiva":
-                    valor = 5 - valor # Converte: 4 vira 1, 1 vira 4
-                
-                dados.append(valor)
+            df = pd.DataFrame(response_dados.data)
             
-            total = sum(dados)
+            # Cálculo de risco: SOMA DIRETA das respostas
+            # (Certifique-se de que a coluna 'resposta' contenha os valores numéricos)
+            total = df['resposta'].sum()
             
             # Classificação
             if total <= 33: classificacao = "Baixo Risco"
