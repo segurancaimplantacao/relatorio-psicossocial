@@ -16,33 +16,30 @@ nome_empresa_escolhida = st.selectbox("Selecione a Empresa:", df_emp['nome_empre
 id_empresa = df_emp.loc[df_emp['nome_empresa'] == nome_empresa_escolhida, 'id'].values[0]
 
 # 2. Busca Funcionários
-response_funcs = supabase.table("funcionarios").select("nome").eq("empresa_id", int(id_empresa)).execute()
+response_funcs = supabase.table("funcionarios").select("id, nome").eq("empresa_id", int(id_empresa)).execute()
 df_funcs = pd.DataFrame(response_funcs.data)
 
 if not df_funcs.empty:
-    lista_funcs = df_funcs['nome'].unique().tolist()
-    funcionario_selecionado = st.selectbox("Selecione o Funcionário:", lista_funcs)
+    # Criamos um mapa para saber qual ID pertence a qual nome
+    nome_para_id = dict(zip(df_funcs['nome'], df_funcs['id']))
+    funcionario_selecionado = st.selectbox("Selecione o Funcionário:", list(nome_para_id.keys()))
     
     if funcionario_selecionado:
-        # TENTA BUSCAR OS DADOS
-        # Verifique se a coluna na tabela 'respostas' se chama 'nome' mesmo!
-        response_dados = supabase.table("respostas").select("*").eq("nome", funcionario_selecionado).execute()
+        id_funcionario = nome_para_id[funcionario_selecionado]
+        
+        # 3. Busca os dados na tabela 'respostas' usando 'funcionarios_id'
+        response_dados = supabase.table("respostas").select("*").eq("funcionarios_id", id_funcionario).execute()
         
         if response_dados.data:
             df = pd.DataFrame(response_dados.data)
             
-            # Cálculo de risco
-            def calcular_risco(row):
-                val = row.get('resposta', 0)
-                # Verifica se a coluna 'Tipo' existe
-                if row.get('Tipo') == 'Positiva':
-                    return 4 - val
-                return val
-            
-            df['pontos_risco'] = df.apply(calcular_risco, axis=1)
-            total = df['pontos_risco'].sum()
+            # Cálculo de risco (considerando que 'resposta' é a coluna com o número)
+            # Como a tabela 'respostas' não tem 'Tipo', vamos assumir um cálculo direto
+            total = df['resposta'].sum()
             
             st.metric("Pontuação Total de Risco", total)
             st.write(f"### Classificação: {'Baixo Risco' if total <= 33 else 'Risco Moderado' if total <= 46 else 'Alto Risco'}")
         else:
-            st.error("Não achei dados de respostas para este funcionário. Verifique se o nome na tabela 'respostas' é idêntico ao da tabela 'funcionarios'.")
+            st.error("Não foram encontradas respostas para este funcionário.")
+else:
+    st.warning("Nenhum funcionário cadastrado nesta empresa.")
