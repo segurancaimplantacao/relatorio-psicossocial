@@ -20,25 +20,39 @@ response_funcs = supabase.table("funcionarios").select("id, nome").eq("empresa_i
 df_funcs = pd.DataFrame(response_funcs.data)
 
 if not df_funcs.empty:
-    # Criamos um mapa para saber qual ID pertence a qual nome
     nome_para_id = dict(zip(df_funcs['nome'], df_funcs['id']))
     funcionario_selecionado = st.selectbox("Selecione o Funcionário:", list(nome_para_id.keys()))
     
     if funcionario_selecionado:
         id_funcionario = nome_para_id[funcionario_selecionado]
         
-        # 3. Busca os dados na tabela 'respostas' usando 'funcionarios_id'
-        response_dados = supabase.table("respostas").select("*").eq("funcionarios_id", id_funcionario).execute()
+        # 3. Busca respostas e as perguntas associadas
+        # Aqui usamos o conceito de JOIN para trazer o texto da pergunta e o tipo
+        response_dados = supabase.table("respostas").select("resposta, perguntas(pergunta, tipo)").eq("funcionarios_id", id_funcionario).execute()
         
         if response_dados.data:
-            df = pd.DataFrame(response_dados.data)
+            dados = []
+            for item in response_dados.data:
+                # Transforma a resposta texto (ex: "Concordo") em pontos (1 a 4)
+                # Exemplo: Concordo=4, Discordo=1
+                valor = 4 if item['resposta'] == "Concordo" else 1
+                
+                # Se for pergunta Positiva, invertemos o valor
+                if item['perguntas']['tipo'] == "Positiva":
+                    valor = 5 - valor # Converte: 4 vira 1, 1 vira 4
+                
+                dados.append(valor)
             
-            # Cálculo de risco (considerando que 'resposta' é a coluna com o número)
-            # Como a tabela 'respostas' não tem 'Tipo', vamos assumir um cálculo direto
-            total = df['resposta'].sum()
+            total = sum(dados)
             
+            # Classificação
+            if total <= 33: classificacao = "Baixo Risco"
+            elif total <= 46: classificacao = "Risco Moderado"
+            else: classificacao = "Alto Risco"
+                
+            st.subheader(f"Resultado: {funcionario_selecionado}")
             st.metric("Pontuação Total de Risco", total)
-            st.write(f"### Classificação: {'Baixo Risco' if total <= 33 else 'Risco Moderado' if total <= 46 else 'Alto Risco'}")
+            st.write(f"### Classificação: {classificacao}")
         else:
             st.error("Não foram encontradas respostas para este funcionário.")
 else:
