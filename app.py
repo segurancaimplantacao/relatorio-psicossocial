@@ -7,50 +7,63 @@ SUPABASE_URL = "https://auiyjfhumfvfdqhhyoch.supabase.co"
 SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-st.set_page_config(layout="centered") # layout centrado para melhor formato retrato
-
+st.set_page_config(layout="centered")
 st.title("🩺 Relatório de Avaliação Individual")
 
 try:
+    # Carregando dados
     df_perguntas = pd.DataFrame(supabase.table("perguntas").select("*").execute().data)
     df_empresas = pd.DataFrame(supabase.table("empresas").select("*").execute().data)
     df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
     df_respostas = pd.DataFrame(supabase.table("respostas").select("*").execute().data)
 
+    # Seletores
     emp_map = dict(zip(df_empresas['nome_empresa'], df_empresas['id']))
     emp_selecionada = st.selectbox("Selecione uma empresa:", list(emp_map.keys()))
-    
     funcs_emp = df_funcs[df_funcs['empresa_id'] == emp_map[emp_selecionada]]
     func_map = dict(zip(funcs_emp['nome'], funcs_emp['id']))
     func_selecionado = st.selectbox("Selecione o Funcionário:", list(func_map.keys()))
 
     if st.button("Gerar Análise"):
         func_id = func_map[func_selecionado]
-        df_f = df_respostas[df_respostas['funcionarios_id'] == func_id].merge(df_perguntas, left_on='pergunta_id', right_on='id')
+        df_f = df_respostas[df_respostas['funcionarios_id'] == func_id].merge(
+            df_perguntas, left_on='pergunta_id', right_on='id'
+        )
         col_tipo = 'Tipo' if 'Tipo' in df_f.columns else 'tipo'
-        
-        # Cálculo: invertendo perguntas negativas para somar como risco
+
+        # Lógica de cálculo corrigida:
+        # Respostas: 1 (Discordo), 2 (Parcial), 3 (Concordo)
         def calc_pts(row):
             pts = row['resposta']
-            return pts if row[col_tipo] == 'Negativa' else (4 - pts)
+            # Se Positiva (ex: comunicação): Concordar (3) é bom (0 pts), Discordar (1) é ruim (2 pts)
+            if row[col_tipo] == 'Positiva':
+                return 3 - pts
+            # Se Negativa (ex: sobrecarga): Concordar (3) é ruim (2 pts), Discordar (1) é bom (0 pts)
+            else:
+                return pts - 1
         
         df_f['pontos'] = df_f.apply(calc_pts, axis=1)
         resumo = df_f.groupby('categoria')['pontos'].sum().reset_index()
 
-        # Exibição vertical (retrato)
+        # Classificação baseada em % (0 a 100%)
+        total_pontos = df_f['pontos'].sum()
+        max_possivel = len(df_f) * 2
+        porcentagem = (total_pontos / max_possivel) * 100
+
+        # Exibição
         st.subheader(f"Análise: {func_selecionado}")
         for _, row in resumo.iterrows():
             st.write(f"**{row['categoria']}**: {row['pontos']} pontos")
         
-        # Lógica de Foco de Atenção
+        if porcentagem < 25: status, cor = "Fora de Risco", "success"
+        elif porcentagem < 60: status, cor = "Risco Moderado", "warning"
+        else: status, cor = "Alto Risco", "error"
+
+        st.metric("Nível de Risco", f"{porcentagem:.0f}%", delta=status, delta_color="inverse")
+        
         maior_risco = resumo.loc[resumo['pontos'].idxmax()]
-        st.warning(f"💡 **Foco de Atenção:** {maior_risco['categoria']}")
-        
-        st.write("### Plano de Ação Sugerido")
-        st.success(f"Desenvolver ações focadas em {maior_risco['categoria']} para melhorar a pontuação do colaborador.")
-        
-        total = resumo['pontos'].sum()
-        st.metric("Pontuação Total de Risco", total)
+        getattr(st, cor)(f"💡 **Situação: {status}**")
+        st.info(f"**Plano de Ação:** Priorizar melhorias em **{maior_risco['categoria']}**.")
 
 except Exception as e:
-    st.error("Erro ao gerar relatório.")
+    st.error("Erro ao processar dados. Verifique a estrutura da tabela.")
