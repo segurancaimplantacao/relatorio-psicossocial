@@ -18,9 +18,6 @@ try:
     df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
     df_respostas = pd.DataFrame(supabase.table("respostas").select("*").execute().data)
 
-    # Debug: Mostrar colunas se ocorrer erro
-    # st.write(df_respostas.columns) 
-
     # Seletores
     emp_map = dict(zip(df_empresas['nome_empresa'], df_empresas['id']))
     emp_selecionada = st.selectbox("Selecione uma empresa:", list(emp_map.keys()))
@@ -32,17 +29,19 @@ try:
     if st.button("Gerar Análise"):
         func_id = func_map[func_selecionado]
         
-        # O erro ocorre aqui. Verifique se no seu banco a coluna é 'funcionario_id' ou apenas 'funcionario'
-        if 'funcionario_id' not in df_respostas.columns:
-            st.error(f"Coluna 'funcionario_id' não encontrada. Colunas disponíveis: {list(df_respostas.columns)}")
+        # Ajustado para usar a coluna correta que apareceu no erro: 'funcionarios_id'
+        if 'funcionarios_id' not in df_respostas.columns:
+            st.error(f"Coluna 'funcionarios_id' não encontrada. Colunas disponíveis: {list(df_respostas.columns)}")
         else:
-            df_f = df_respostas[df_respostas['funcionario_id'] == func_id].merge(
+            # Filtra usando a coluna correta 'funcionarios_id'
+            df_f = df_respostas[df_respostas['funcionarios_id'] == func_id].merge(
                 df_perguntas, left_on='pergunta_id', right_on='id'
             )
             
             # Cálculo de pontos
             def calc_pts(row):
                 pts = row['resposta']
+                # Se for Positiva, 3 é o melhor. Se for Negativa, 1 é o melhor (invertemos)
                 return pts if row['tipo'] == 'Positiva' else (4 - pts)
             
             df_f['pontos'] = df_f.apply(calc_pts, axis=1)
