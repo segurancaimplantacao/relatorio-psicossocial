@@ -11,7 +11,7 @@ st.set_page_config(layout="centered")
 st.title("🩺 Relatório de Avaliação Individual")
 
 try:
-    # Carregamento
+    # Carregamento dos dados
     df_perguntas = pd.DataFrame(supabase.table("perguntas").select("*").execute().data)
     df_empresas = pd.DataFrame(supabase.table("empresas").select("*").execute().data)
     df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
@@ -28,12 +28,13 @@ try:
     if st.button("Gerar Análise"):
         func_id = func_map[func_selecionado]
         
-        # Filtro e Merge
+        # Merge Seguro
+        # Usando 'funcionarios_id' (conforme print 092722) e 'pergunta_id'
         df_f = df_respostas[df_respostas['funcionarios_id'] == func_id].merge(
             df_perguntas, left_on='pergunta_id', right_on='id'
         )
         
-        # Correção automática de coluna: Verifica 'Tipo' ou 'tipo'
+        # Detecção automática de coluna 'tipo' (não importa se maiúscula ou minúscula)
         col_tipo = 'Tipo' if 'Tipo' in df_f.columns else 'tipo'
 
         if df_f.empty:
@@ -53,21 +54,10 @@ try:
             for _, row in resumo.iterrows():
                 st.write(f"**{row['categoria']}**: {row['pontos']} pontos")
             
-            # Cálculo de % de risco
+            # Cálculo de %
             total_pts = df_f['pontos'].sum()
             max_possivel = len(df_f) * 2
             porcentagem = (total_pts / max_possivel) * 100
 
-            # Lógica de Risco
-            if porcentagem < 25: status, cor = "Fora de Risco", "success"
-            elif porcentagem < 60: status, cor = "Risco Moderado", "warning"
-            else: status, cor = "Alto Risco", "error"
-
-            st.metric("Nível de Risco", f"{porcentagem:.0f}%", delta=status, delta_color="inverse")
-            
-            maior_risco = resumo.loc[resumo['pontos'].idxmax()]
-            getattr(st, cor)(f"💡 **Situação: {status}**")
-            st.info(f"**Plano de Ação:** Priorizar **{maior_risco['categoria']}**.")
-
-except Exception as e:
-    st.error(f"Erro ao processar: {e}")
+            # Lógica de Status
+            if porcentagem < 25: status, cor = "Fora de Risco", "
