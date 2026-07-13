@@ -2,7 +2,7 @@ import streamlit as st
 from supabase import create_client
 import pandas as pd
 
-# Configuração da conexão
+# Conexão
 SUPABASE_URL = "https://auiyjfhumfvfdqhhyoch.supabase.co"
 SUPABASE_KEY = "sb_publishable_u4mWfoCij_AnmwEw_H8H2w_OcPP_ToN"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -10,14 +10,15 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 st.set_page_config(layout="centered")
 st.title("🩺 Relatório de Avaliação Individual")
 
+# A estrutura try/except deve envolver todo o código de processamento
 try:
-    # 1. Carregamento dos dados
+    # 1. Carregamento
     df_perguntas = pd.DataFrame(supabase.table("perguntas").select("*").execute().data)
     df_empresas = pd.DataFrame(supabase.table("empresas").select("*").execute().data)
     df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
     df_respostas = pd.DataFrame(supabase.table("respostas").select("*").execute().data)
 
-    # 2. Seletores de Empresa e Funcionário
+    # 2. Seletores
     emp_map = dict(zip(df_empresas['nome_empresa'], df_empresas['id']))
     emp_selecionada = st.selectbox("Selecione uma empresa:", list(emp_map.keys()))
     
@@ -28,18 +29,17 @@ try:
     if st.button("Gerar Análise"):
         func_id = func_map[func_selecionado]
         
-        # 3. Merge: Garantindo uso de 'funcionarios_id' e 'pergunta_id'
+        # 3. Merge
         df_f = df_respostas[df_respostas['funcionarios_id'] == func_id].merge(
             df_perguntas, left_on='pergunta_id', right_on='id'
         )
         
-        # Correção dinâmica de coluna 'tipo'
         col_tipo = 'Tipo' if 'Tipo' in df_f.columns else 'tipo'
 
         if df_f.empty:
             st.error(f"Nenhuma resposta encontrada para {func_selecionado} (ID: {func_id}).")
         else:
-            # 4. Cálculo de Pontos (Corrigido com os dois-pontos ':')
+            # 4. Cálculo
             def calc_pts(row):
                 pts = row['resposta']
                 if row[col_tipo] == 'Positiva':
@@ -54,3 +54,25 @@ try:
             total_pts = df_f['pontos'].sum()
             max_possivel = len(df_f) * 2
             porcentagem = (total_pts / max_possivel) * 100
+
+            # 6. Exibição
+            st.subheader(f"Análise: {func_selecionado}")
+            for _, row in resumo.iterrows():
+                st.write(f"**{row['categoria']}**: {row['pontos']} pontos")
+            
+            if porcentagem < 25: 
+                status, cor = "Fora de Risco", "success"
+            elif porcentagem < 60: 
+                status, cor = "Risco Moderado", "warning"
+            else: 
+                status, cor = "Alto Risco", "error"
+
+            st.metric("Nível de Risco", f"{porcentagem:.0f}%", delta=status, delta_color="inverse")
+            
+            maior_risco = resumo.loc[resumo['pontos'].idxmax()]
+            getattr(st, cor)(f"💡 **Situação: {status}**")
+            st.info(f"**Plano de Ação:** Priorizar melhorias em **{maior_risco['categoria']}**.")
+
+# O "except" deve vir logo após o fechamento do bloco "try"
+except Exception as e:
+    st.error(f"Erro ao processar: {e}")
