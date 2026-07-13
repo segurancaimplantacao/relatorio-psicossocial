@@ -12,7 +12,7 @@ st.set_page_config(layout="wide")
 st.title("🩺 Relatório de Avaliação Individual")
 
 try:
-    # Carregando tabelas
+    # Carregando tabelas garantindo o carregamento de todas as colunas
     df_perguntas = pd.DataFrame(supabase.table("perguntas").select("*").execute().data)
     df_empresas = pd.DataFrame(supabase.table("empresas").select("*").execute().data)
     df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
@@ -29,19 +29,20 @@ try:
     if st.button("Gerar Análise"):
         func_id = func_map[func_selecionado]
         
-        # Ajustado para usar a coluna correta que apareceu no erro: 'funcionarios_id'
-        if 'funcionarios_id' not in df_respostas.columns:
-            st.error(f"Coluna 'funcionarios_id' não encontrada. Colunas disponíveis: {list(df_respostas.columns)}")
+        # Filtra usando a coluna correta 'funcionarios_id'
+        df_f = df_respostas[df_respostas['funcionarios_id'] == func_id].merge(
+            df_perguntas, left_on='pergunta_id', right_on='id'
+        )
+        
+        # Verificação crítica de colunas antes do cálculo
+        if 'tipo' not in df_f.columns:
+            st.error(f"Coluna 'tipo' não encontrada. Colunas disponíveis: {list(df_f.columns)}")
         else:
-            # Filtra usando a coluna correta 'funcionarios_id'
-            df_f = df_respostas[df_respostas['funcionarios_id'] == func_id].merge(
-                df_perguntas, left_on='pergunta_id', right_on='id'
-            )
-            
             # Cálculo de pontos
             def calc_pts(row):
                 pts = row['resposta']
-                # Se for Positiva, 3 é o melhor. Se for Negativa, 1 é o melhor (invertemos)
+                # Se for Positiva, o valor da resposta é a pontuação (1 a 3).
+                # Se for Negativa, invertemos (4 - valor).
                 return pts if row['tipo'] == 'Positiva' else (4 - pts)
             
             df_f['pontos'] = df_f.apply(calc_pts, axis=1)
