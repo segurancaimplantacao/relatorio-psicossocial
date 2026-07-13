@@ -11,12 +11,15 @@ st.set_page_config(layout="wide")
 
 st.title("🩺 Relatório de Avaliação Individual")
 
-# Carregar dados
 try:
+    # Carregando tabelas
     df_perguntas = pd.DataFrame(supabase.table("perguntas").select("*").execute().data)
     df_empresas = pd.DataFrame(supabase.table("empresas").select("*").execute().data)
     df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
     df_respostas = pd.DataFrame(supabase.table("respostas").select("*").execute().data)
+
+    # Debug: Mostrar colunas se ocorrer erro
+    # st.write(df_respostas.columns) 
 
     # Seletores
     emp_map = dict(zip(df_empresas['nome_empresa'], df_empresas['id']))
@@ -29,23 +32,28 @@ try:
     if st.button("Gerar Análise"):
         func_id = func_map[func_selecionado]
         
-        # Cruzar dados
-        df_f = df_respostas[df_respostas['funcionario_id'] == func_id].merge(df_perguntas, left_on='pergunta_id', right_on='id')
-        
-        # Cálculo de pontos (Invertendo se for negativa)
-        def calc_pts(row):
-            pts = row['resposta']
-            return pts if row['tipo'] == 'Positiva' else (4 - pts)
-        
-        df_f['pontos'] = df_f.apply(calc_pts, axis=1)
-        
-        # Exibição do relatório
-        st.subheader(f"Análise Detalhada: {func_selecionado}")
-        resumo = df_f.groupby('categoria')['pontos'].sum().reset_index()
-        st.table(resumo.rename(columns={'categoria': 'Categoria', 'pontos': 'Pontos'}))
-        
-        total = resumo['pontos'].sum()
-        st.metric("Pontuação Total de Risco", total)
+        # O erro ocorre aqui. Verifique se no seu banco a coluna é 'funcionario_id' ou apenas 'funcionario'
+        if 'funcionario_id' not in df_respostas.columns:
+            st.error(f"Coluna 'funcionario_id' não encontrada. Colunas disponíveis: {list(df_respostas.columns)}")
+        else:
+            df_f = df_respostas[df_respostas['funcionario_id'] == func_id].merge(
+                df_perguntas, left_on='pergunta_id', right_on='id'
+            )
+            
+            # Cálculo de pontos
+            def calc_pts(row):
+                pts = row['resposta']
+                return pts if row['tipo'] == 'Positiva' else (4 - pts)
+            
+            df_f['pontos'] = df_f.apply(calc_pts, axis=1)
+            
+            # Exibição
+            st.subheader(f"Análise Detalhada: {func_selecionado}")
+            resumo = df_f.groupby('categoria')['pontos'].sum().reset_index()
+            st.table(resumo.rename(columns={'categoria': 'Categoria', 'pontos': 'Pontos'}))
+            
+            total = resumo['pontos'].sum()
+            st.metric("Pontuação Total de Risco", total)
 
 except Exception as e:
-    st.error(f"Erro ao carregar dados. Verifique se as políticas de leitura no Supabase foram criadas para todas as tabelas: {e}")
+    st.error(f"Erro ao carregar dados: {e}")
