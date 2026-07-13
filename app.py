@@ -12,7 +12,7 @@ st.set_page_config(layout="wide")
 st.title("🩺 Relatório de Avaliação Individual")
 
 try:
-    # Carregando tabelas garantindo o carregamento de todas as colunas
+    # Carregando tabelas
     df_perguntas = pd.DataFrame(supabase.table("perguntas").select("*").execute().data)
     df_empresas = pd.DataFrame(supabase.table("empresas").select("*").execute().data)
     df_funcs = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
@@ -34,16 +34,18 @@ try:
             df_perguntas, left_on='pergunta_id', right_on='id'
         )
         
-        # Verificação crítica de colunas antes do cálculo
-        if 'tipo' not in df_f.columns:
-            st.error(f"Coluna 'tipo' não encontrada. Colunas disponíveis: {list(df_f.columns)}")
+        # Identificar se a coluna é 'Tipo' ou 'tipo'
+        col_tipo = 'Tipo' if 'Tipo' in df_f.columns else 'tipo'
+        
+        if col_tipo not in df_f.columns:
+            st.error(f"Coluna de tipo não encontrada. Colunas: {list(df_f.columns)}")
         else:
             # Cálculo de pontos
             def calc_pts(row):
                 pts = row['resposta']
-                # Se for Positiva, o valor da resposta é a pontuação (1 a 3).
-                # Se for Negativa, invertemos (4 - valor).
-                return pts if row['tipo'] == 'Positiva' else (4 - pts)
+                # Se for 'Positiva', o valor da resposta é a pontuação. 
+                # Se for 'Negativa', invertemos (4 - valor).
+                return pts if row[col_tipo] == 'Positiva' else (4 - pts)
             
             df_f['pontos'] = df_f.apply(calc_pts, axis=1)
             
